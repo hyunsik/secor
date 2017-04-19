@@ -52,8 +52,8 @@ public class ConsumerMain {
         }
         try {
             SecorConfig config = SecorConfig.load();
-            OstrichAdminService ostrichService = new OstrichAdminService(config.getOstrichPort());
-            ostrichService.start();
+            //OstrichAdminService ostrichService = new OstrichAdminService(config.getOstrichPort());
+            //ostrichService.start();
             FileUtil.configure(config);
 
             LogFileDeleter logFileDeleter = new LogFileDeleter(config);
