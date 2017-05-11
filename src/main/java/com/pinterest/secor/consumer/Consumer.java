@@ -27,9 +27,13 @@ import com.pinterest.secor.reader.MessageReader;
 import com.pinterest.secor.transformer.MessageTransformer;
 import com.pinterest.secor.uploader.UploadManager;
 import com.pinterest.secor.uploader.Uploader;
+import com.pinterest.secor.util.KafkaUtil;
 import com.pinterest.secor.util.ReflectionUtil;
 import com.pinterest.secor.writer.MessageWriter;
 import kafka.consumer.ConsumerTimeoutException;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.serialization.ByteArrayDeserializer;
+import org.apache.kafka.common.serialization.Deserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +55,8 @@ public class Consumer extends Thread {
     protected SecorConfig mConfig;
     protected MetricCollector mMetricCollector;
 
+    protected final static Deserializer<byte []> BytesArrayDeserializer = new ByteArrayDeserializer();
+    protected KafkaConsumer<byte [], byte []> mConsumer;
     protected MessageReader mMessageReader;
     protected MessageWriter mMessageWriter;
     protected MessageParser mMessageParser;
@@ -66,14 +72,16 @@ public class Consumer extends Thread {
 
     private void init() throws Exception {
         mOffsetTracker = new OffsetTracker();
-        mMessageReader = new MessageReader(mConfig, mOffsetTracker);
+        mConsumer = KafkaUtil.newKafkaConsumer(mConfig, BytesArrayDeserializer, BytesArrayDeserializer);
+
+        mMessageReader = new MessageReader(mConfig, mOffsetTracker, mConsumer);
         mMetricCollector = ReflectionUtil.createMetricCollector(mConfig.getMetricsCollectorClass());
 
         FileRegistry fileRegistry = new FileRegistry(mConfig);
         UploadManager uploadManager = ReflectionUtil.createUploadManager(mConfig.getUploadManagerClass(), mConfig);
 
         mUploader = ReflectionUtil.createUploader(mConfig.getUploaderClass());
-        mUploader.init(mConfig, mOffsetTracker, fileRegistry, uploadManager, mMetricCollector);
+        mUploader.init(mConfig, mOffsetTracker, mConsumer, fileRegistry, uploadManager, mMetricCollector);
         mMessageWriter = new MessageWriter(mConfig, mOffsetTracker, fileRegistry);
         mMessageParser = ReflectionUtil.createMessageParser(mConfig.getMessageParserClass(), mConfig);
         mMessageTransformer = ReflectionUtil.createMessageTransformer(mConfig.getMessageTransformerClass(), mConfig);

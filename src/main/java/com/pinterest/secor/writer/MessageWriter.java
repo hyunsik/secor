@@ -93,7 +93,7 @@ public class MessageWriter {
         		mFileExtension);
         FileWriter writer = mFileRegistry.getOrCreateWriter(path, mCodec);
         writer.write(new KeyValue(message.getOffset(), message.getKafkaKey(), message.getPayload()));
-        LOG.debug("appended message {} to file {}.  File length {}",
-                  message, path, writer.getLength());
+//        LOG.debug("appended message {} to file {}.  File length {}",
+//                  message, path, writer.getLength());
     }
 }

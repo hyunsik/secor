@@ -17,6 +17,7 @@
 package com.pinterest.secor.uploader;
 
 import com.pinterest.secor.common.*;
+import com.pinterest.secor.common.TopicPartition;
 import com.pinterest.secor.io.FileReader;
 import com.pinterest.secor.io.FileWriter;
 import com.pinterest.secor.io.KeyValue;
@@ -24,9 +25,13 @@ import com.pinterest.secor.monitoring.MetricCollector;
 import com.pinterest.secor.util.FileUtil;
 import com.pinterest.secor.util.IdUtil;
 
+import com.pinterest.secor.util.KafkaUtil;
 import junit.framework.TestCase;
 
 import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
+import org.apache.kafka.common.*;
 import org.joda.time.DateTime;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -39,7 +44,9 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 
 /**
  * UploaderTest tests the log file uploader logic.
@@ -53,10 +60,11 @@ public class UploaderTest extends TestCase {
         private FileReader mReader;
 
         public TestUploader(SecorConfig config, OffsetTracker offsetTracker,
+                            KafkaConsumer<byte [], byte []> consumer,
                             FileRegistry fileRegistry,
                             UploadManager uploadManager,
                             ZookeeperConnector zookeeperConnector) {
-            init(config, offsetTracker, fileRegistry, uploadManager, zookeeperConnector, Mockito.mock(MetricCollector.class));
+            init(config, offsetTracker, consumer, fileRegistry, uploadManager, zookeeperConnector, Mockito.mock(MetricCollector.class));
             mReader = Mockito.mock(FileReader.class);
         }
 
@@ -77,6 +85,7 @@ public class UploaderTest extends TestCase {
 
     private SecorConfig mConfig;
     private OffsetTracker mOffsetTracker;
+    private KafkaConsumer<byte [], byte []> mConsumer;
     private FileRegistry mFileRegistry;
     private ZookeeperConnector mZookeeperConnector;
     private UploadManager mUploadManager;
@@ -99,6 +108,8 @@ public class UploaderTest extends TestCase {
 
         mOffsetTracker = Mockito.mock(OffsetTracker.class);
 
+        mConsumer = Mockito.mock(KafkaConsumer.class);
+
         mFileRegistry = Mockito.mock(FileRegistry.class);
         Mockito.when(mFileRegistry.getSize(mTopicPartition)).thenReturn(100L);
         HashSet<TopicPartition> topicPartitions = new HashSet<TopicPartition>();
@@ -109,7 +120,7 @@ public class UploaderTest extends TestCase {
         mUploadManager = new HadoopS3UploadManager(mConfig);
 
         mZookeeperConnector = Mockito.mock(ZookeeperConnector.class);
-        mUploader = new TestUploader(mConfig, mOffsetTracker, mFileRegistry, mUploadManager,
+        mUploader = new TestUploader(mConfig, mOffsetTracker, mConsumer, mFileRegistry, mUploadManager,
                 mZookeeperConnector);
     }
 
@@ -124,6 +135,7 @@ public class UploaderTest extends TestCase {
         Mockito.when(mConfig.getCloudService()).thenReturn("S3");
         Mockito.when(mConfig.getS3Bucket()).thenReturn("some_bucket");
         Mockito.when(mConfig.getS3Path()).thenReturn("some_s3_parent_dir");
+        whenConsumerGetCommittedOffsetCount(0L);
 
         HashSet<LogFilePath> logFilePaths = new HashSet<LogFilePath>();
         logFilePaths.add(mLogFilePath);
@@ -144,17 +156,25 @@ public class UploaderTest extends TestCase {
                 "s3a://some_bucket/some_s3_parent_dir/some_topic/some_partition/"
                         + "some_other_partition/10_0_00000000000000000010");
         Mockito.verify(mFileRegistry).deleteTopicPartition(mTopicPartition);
-        Mockito.verify(mZookeeperConnector).setCommittedOffsetCount(
-                mTopicPartition, 1L);
-        Mockito.verify(mOffsetTracker).setCommittedOffsetCount(mTopicPartition,
-                1L);
+        verifyConsumerCommitSync(1L);
         Mockito.verify(mZookeeperConnector).unlock(lockPath);
     }
 
+    private void whenConsumerGetCommittedOffsetCount(long offset) {
+        org.apache.kafka.common.TopicPartition tp = KafkaUtil.convertTopicPartition(mTopicPartition);
+        OffsetAndMetadata meta = Mockito.mock(OffsetAndMetadata.class);
+        Mockito.when(meta.offset()).thenReturn(offset);
+        Mockito.when(mConsumer.committed(tp)).thenReturn(meta);
+    }
+
+    private void verifyConsumerCommitSync(long offset) {
+        Map<org.apache.kafka.common.TopicPartition, OffsetAndMetadata> offsets = new HashMap<org.apache.kafka.common.TopicPartition, OffsetAndMetadata>();
+        offsets.put(KafkaUtil.convertTopicPartition(mTopicPartition), new OffsetAndMetadata(offset));
+        Mockito.verify(mConsumer).commitSync(offsets);
+    }
+
     public void testUploadFiles() throws Exception {
-        Mockito.when(
-                mZookeeperConnector.getCommittedOffsetCount(mTopicPartition))
-                .thenReturn(11L);
+        whenConsumerGetCommittedOffsetCount(11L);
         Mockito.when(
                 mOffsetTracker.setCommittedOffsetCount(mTopicPartition, 11L))
                 .thenReturn(11L);
@@ -191,17 +211,14 @@ public class UploaderTest extends TestCase {
                 "s3a://some_bucket/some_s3_parent_dir/some_topic/some_partition/"
                         + "some_other_partition/10_0_00000000000000000010");
         Mockito.verify(mFileRegistry).deleteTopicPartition(mTopicPartition);
-        Mockito.verify(mZookeeperConnector).setCommittedOffsetCount(
-                mTopicPartition, 21L);
+        verifyConsumerCommitSync(21L);
         Mockito.verify(mOffsetTracker).setCommittedOffsetCount(mTopicPartition,
                 21L);
         Mockito.verify(mZookeeperConnector).unlock(lockPath);
     }
 
     public void testDeleteTopicPartition() throws Exception {
-        Mockito.when(
-                mZookeeperConnector.getCommittedOffsetCount(mTopicPartition))
-                .thenReturn(31L);
+        whenConsumerGetCommittedOffsetCount(31L);
         Mockito.when(
                 mOffsetTracker.setCommittedOffsetCount(mTopicPartition, 30L))
                 .thenReturn(11L);
@@ -214,9 +231,7 @@ public class UploaderTest extends TestCase {
     }
 
     public void testTrimFiles() throws Exception {
-        Mockito.when(
-                mZookeeperConnector.getCommittedOffsetCount(mTopicPartition))
-                .thenReturn(21L);
+        whenConsumerGetCommittedOffsetCount(21L);
         Mockito.when(
                 mOffsetTracker.setCommittedOffsetCount(mTopicPartition, 21L))
                 .thenReturn(20L);

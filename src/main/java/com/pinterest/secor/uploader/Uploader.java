@@ -24,10 +24,12 @@ import com.pinterest.secor.io.KeyValue;
 import com.pinterest.secor.monitoring.MetricCollector;
 import com.pinterest.secor.util.CompressionUtil;
 import com.pinterest.secor.util.IdUtil;
+import com.pinterest.secor.util.KafkaUtil;
 import com.pinterest.secor.util.ReflectionUtil;
-
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +49,7 @@ public class Uploader {
     protected MetricCollector mMetricCollector;
     protected OffsetTracker mOffsetTracker;
     protected FileRegistry mFileRegistry;
+    protected KafkaConsumer<byte [], byte []> mConsumer;
     protected ZookeeperConnector mZookeeperConnector;
     protected UploadManager mUploadManager;
     protected String mTopicFilter;
@@ -61,18 +64,19 @@ public class Uploader {
      * @param uploadManager Manager of the physical upload of log files to the remote repository
      * @param metricCollector component that ingest metrics into monitoring system
      */
-    public void init(SecorConfig config, OffsetTracker offsetTracker, FileRegistry fileRegistry,
+    public void init(SecorConfig config, OffsetTracker offsetTracker, KafkaConsumer consumer, FileRegistry fileRegistry,
                      UploadManager uploadManager, MetricCollector metricCollector) {
-        init(config, offsetTracker, fileRegistry, uploadManager,
+        init(config, offsetTracker, consumer, fileRegistry, uploadManager,
                 new ZookeeperConnector(config), metricCollector);
     }
 
     // For testing use only.
-    public void init(SecorConfig config, OffsetTracker offsetTracker, FileRegistry fileRegistry,
+    public void init(SecorConfig config, OffsetTracker offsetTracker, KafkaConsumer consumer, FileRegistry fileRegistry,
                      UploadManager uploadManager,
                      ZookeeperConnector zookeeperConnector, MetricCollector metricCollector) {
         mConfig = config;
         mOffsetTracker = offsetTracker;
+        mConsumer = consumer;
         mFileRegistry = fileRegistry;
         mUploadManager = uploadManager;
         mZookeeperConnector = zookeeperConnector;
@@ -96,8 +100,7 @@ public class Uploader {
         mZookeeperConnector.lock(lockPath);
         try {
             // Check if the committed offset has changed.
-            long zookeeperCommittedOffsetCount = mZookeeperConnector.getCommittedOffsetCount(
-                    topicPartition);
+            long zookeeperCommittedOffsetCount = getCommittedOffsetCount(topicPartition);
             if (zookeeperCommittedOffsetCount == committedOffsetCount) {
                 LOG.info("uploading topic {} partition {}", topicPartition.getTopic(), topicPartition.getPartition());
                 // Deleting writers closes their streams flushing all pending data to the disk.
@@ -111,7 +114,7 @@ public class Uploader {
                     uploadHandle.get();
                 }
                 mFileRegistry.deleteTopicPartition(topicPartition);
-                mZookeeperConnector.setCommittedOffsetCount(topicPartition, lastSeenOffset + 1);
+                setCommitCount(topicPartition, lastSeenOffset + 1);
                 mOffsetTracker.setCommittedOffsetCount(topicPartition, lastSeenOffset + 1);
 
                 mMetricCollector.increment("uploader.file_uploads.count", paths.size(), topicPartition.getTopic());
@@ -216,10 +219,11 @@ public class Uploader {
         if (size >= mConfig.getMaxFileSizeBytes() ||
                 modificationAgeSec >= mConfig.getMaxFileAgeSeconds() ||
                 isRequiredToUploadAtTime(topicPartition)) {
-            long newOffsetCount = mZookeeperConnector.getCommittedOffsetCount(topicPartition);
+            long newOffsetCount = getCommittedOffsetCount(topicPartition);
             long oldOffsetCount = mOffsetTracker.setCommittedOffsetCount(topicPartition,
                     newOffsetCount);
             long lastSeenOffset = mOffsetTracker.getLastSeenOffset(topicPartition);
+            LOG.info("oldOffsetCount {}, newOffsetCount {}, lastSeenOffset {}", oldOffsetCount, newOffsetCount, lastSeenOffset);
             if (oldOffsetCount == newOffsetCount) {
                 LOG.debug("Uploading for: " + topicPartition);
                 uploadFiles(topicPartition);
@@ -256,5 +260,19 @@ public class Uploader {
         for (TopicPartition topicPartition : topicPartitions) {
             checkTopicPartition(topicPartition);
         }
+    }
+
+    private long getCommittedOffsetCount(TopicPartition topicPartition) {
+        OffsetAndMetadata offsetMeta = mConsumer.committed(KafkaUtil.convertTopicPartition(topicPartition));
+        long offset = offsetMeta == null ? -1 : offsetMeta.offset();
+        LOG.info("Committed Offset: {} ({})", topicPartition, offset);
+        return offset;
+    }
+
+    private void setCommitCount(TopicPartition topicPartition, long offset) {
+        LOG.info("Commit {} ({})", topicPartition, offset);
+        Map<org.apache.kafka.common.TopicPartition, OffsetAndMetadata> offsets = new HashMap();
+        offsets.put(KafkaUtil.convertTopicPartition(topicPartition), new OffsetAndMetadata(offset));
+        mConsumer.commitSync(offsets);
     }
 }
