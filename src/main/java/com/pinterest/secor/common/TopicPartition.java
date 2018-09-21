@@ -16,6 +16,8 @@
  */
 package com.pinterest.secor.common;
 
+import kafka.common.Topic;
+
 /**
  * Topic partition describes a kafka message topic-partition pair.
  *
@@ -64,5 +66,9 @@ public class TopicPartition {
                 "mTopic='" + mTopic + '\'' +
                 ", mPartition=" + mPartition +
                 '}';
+    }
+
+    public org.apache.kafka.common.TopicPartition toKafkaTopicPartition() {
+        return new org.apache.kafka.common.TopicPartition(mTopic, mPartition);
     }
 }

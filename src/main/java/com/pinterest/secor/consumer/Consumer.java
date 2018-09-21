@@ -55,7 +55,7 @@ public class Consumer extends Thread {
     protected SecorConfig mConfig;
     protected MetricCollector mMetricCollector;
 
-    protected final static Deserializer<byte []> BytesArrayDeserializer = new ByteArrayDeserializer();
+    public final static Deserializer<byte []> BytesArrayDeserializer = new ByteArrayDeserializer();
     protected KafkaConsumer<byte [], byte []> mConsumer;
     protected MessageReader mMessageReader;
     protected MessageWriter mMessageWriter;

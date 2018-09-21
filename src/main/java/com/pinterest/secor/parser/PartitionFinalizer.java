@@ -5,9 +5,9 @@
  * The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
- *
- *    http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,18 +17,19 @@
 package com.pinterest.secor.parser;
 
 import com.pinterest.secor.common.*;
+import com.pinterest.secor.consumer.Consumer;
 import com.pinterest.secor.message.Message;
 import com.pinterest.secor.util.CompressionUtil;
 import com.pinterest.secor.util.FileUtil;
+import com.pinterest.secor.util.KafkaUtil;
 import com.pinterest.secor.util.ReflectionUtil;
 import org.apache.hadoop.io.compress.CompressionCodec;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.PartitionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Stack;
+import java.util.*;
 
 /**
  * Partition finalizer writes _SUCCESS files to date partitions that very likely won't be receiving
@@ -40,7 +41,6 @@ public class PartitionFinalizer {
     private static final Logger LOG = LoggerFactory.getLogger(PartitionFinalizer.class);
 
     private final SecorConfig mConfig;
-    private final ZookeeperConnector mZookeeperConnector;
     private final TimestampedMessageParser mMessageParser;
     private final KafkaClient mKafkaClient;
     private final QuboleClient mQuboleClient;
@@ -50,9 +50,8 @@ public class PartitionFinalizer {
     public PartitionFinalizer(SecorConfig config) throws Exception {
         mConfig = config;
         mKafkaClient = new KafkaClient(mConfig);
-        mZookeeperConnector = new ZookeeperConnector(mConfig);
         mMessageParser = (TimestampedMessageParser) ReflectionUtil.createMessageParser(
-          mConfig.getMessageParserClass(), mConfig);
+                mConfig.getMessageParserClass(), mConfig);
         mQuboleClient = new QuboleClient(mConfig);
         if (mConfig.getFileExtension() != null && !mConfig.getFileExtension().isEmpty()) {
             mFileExtension = mConfig.getFileExtension();
@@ -77,8 +76,8 @@ public class PartitionFinalizer {
             if (lastMessage == null || committedMessage == null) {
                 // This will happen if no messages have been posted to the given topic partition.
                 LOG.error("For topic {} partition {}, lastMessage: {}, committed: {}",
-                    topicPartition.getTopic(), topicPartition.getPartition(),
-                    lastMessage, committedMessage);
+                        topicPartition.getTopic(), topicPartition.getPartition(),
+                        lastMessage, committedMessage);
                 continue;
             }
             lastMessages.add(lastMessage);
@@ -90,7 +89,7 @@ public class PartitionFinalizer {
     private void finalizePartitionsUpTo(String topic, String[] uptoPartitions) throws Exception {
         String prefix = FileUtil.getPrefix(topic, mConfig);
         LOG.info("Finalize up to (but not include) {}, dim: {}",
-            uptoPartitions, uptoPartitions.length);
+                uptoPartitions, uptoPartitions.length);
 
         String[] previous = mMessageParser.getPreviousPartitions(uptoPartitions);
         Stack<String[]> toBeFinalized = new Stack<String[]>();
@@ -100,7 +99,7 @@ public class PartitionFinalizer {
         for (int i = 0; i < mLookbackPeriods; i++) {
             LOG.info("Looking for partition: " + Arrays.toString(previous));
             LogFilePath logFilePath = new LogFilePath(prefix, topic, previous,
-                mConfig.getGeneration(), 0, 0, mFileExtension);
+                    mConfig.getGeneration(), 0, 0, mFileExtension);
 
             if (FileUtil.s3PathPrefixIsAltered(logFilePath.getLogFilePath(), mConfig)) {
                 logFilePath = logFilePath.withPrefix(FileUtil.getS3AlternativePrefix(mConfig));
@@ -111,7 +110,7 @@ public class PartitionFinalizer {
                 String successFilePath = logFileDir + "/_SUCCESS";
                 if (FileUtil.exists(successFilePath)) {
                     LOG.info(
-                        "SuccessFile exist already, short circuit return. " + successFilePath);
+                            "SuccessFile exist already, short circuit return. " + successFilePath);
                     break;
                 }
                 LOG.info("Folder {} exists and ready to be finalized.", logFileDir);
@@ -179,7 +178,7 @@ public class PartitionFinalizer {
 
             // Generate the SUCCESS file at the end
             LogFilePath logFilePath = new LogFilePath(prefix, topic, current,
-                mConfig.getGeneration(), 0, 0, mFileExtension);
+                    mConfig.getGeneration(), 0, 0, mFileExtension);
 
             if (FileUtil.s3PathPrefixIsAltered(logFilePath.getLogFilePath(), mConfig)) {
                 logFilePath = logFilePath.withPrefix(FileUtil.getS3AlternativePrefix(mConfig));
@@ -196,18 +195,14 @@ public class PartitionFinalizer {
     }
 
     public void finalizePartitions() throws Exception {
-        List<String> topics = mZookeeperConnector.getCommittedOffsetTopics();
-        for (String topic : topics) {
-            if (!topic.matches(mConfig.getKafkaTopicFilter())) {
-                LOG.info("skipping topic {}", topic);
-            } else {
-                LOG.info("finalizing topic {}", topic);
-                String[] partitions = getFinalizedUptoPartitions(topic);
-                LOG.info("finalized timestamp for topic {} is {}", topic , partitions);
-                if (partitions != null) {
-                    finalizePartitionsUpTo(topic, partitions);
-                }
+        for (String topic : mKafkaClient.getTopicList()) {
+            LOG.info("finalizing topic {}", topic);
+            String[] partitions = getFinalizedUptoPartitions(topic);
+            LOG.info("finalized timestamp for topic {} is {}", topic, partitions);
+            if (partitions != null) {
+                finalizePartitionsUpTo(topic, partitions);
             }
         }
+
     }
 }

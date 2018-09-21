@@ -17,7 +17,9 @@
 package com.pinterest.secor.common;
 
 import com.google.common.net.HostAndPort;
+import com.pinterest.secor.consumer.Consumer;
 import com.pinterest.secor.message.Message;
+import com.pinterest.secor.util.KafkaUtil;
 import kafka.api.FetchRequestBuilder;
 import kafka.api.PartitionOffsetRequestInfo;
 import kafka.common.TopicAndPartition;
@@ -30,15 +32,15 @@ import kafka.javaapi.TopicMetadataRequest;
 import kafka.javaapi.TopicMetadataResponse;
 import kafka.javaapi.consumer.SimpleConsumer;
 import kafka.message.MessageAndOffset;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.PartitionInfo;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Kafka client encapsulates the logic interacting with Kafka brokers.
@@ -49,11 +51,15 @@ public class KafkaClient {
     private static final Logger LOG = LoggerFactory.getLogger(KafkaClient.class);
 
     private SecorConfig mConfig;
-    private ZookeeperConnector mZookeeperConnector;
+    private KafkaConsumer mConsumer;
 
     public KafkaClient(SecorConfig config) {
         mConfig = config;
-        mZookeeperConnector = new ZookeeperConnector(mConfig);
+        try {
+            mConsumer = KafkaUtil.newKafkaConsumer(mConfig, Consumer.BytesArrayDeserializer, Consumer.BytesArrayDeserializer);
+        } catch (UnknownHostException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private HostAndPort findLeader(TopicPartition topicPartition) {
@@ -196,10 +202,10 @@ public class KafkaClient {
         }
     }
 
-    public Message getCommittedMessage(TopicPartition topicPartition) throws Exception {
+    public Message getCommittedMessage(TopicPartition topicPartition) {
         SimpleConsumer consumer = null;
         try {
-            long committedOffset = mZookeeperConnector.getCommittedOffsetCount(topicPartition) - 1;
+            long committedOffset = mConsumer.position(topicPartition.toKafkaTopicPartition()) - 1;
             if (committedOffset < 0) {
                 return null;
             }
@@ -210,5 +216,23 @@ public class KafkaClient {
                 consumer.close();
             }
         }
+    }
+
+    public List<String> getTopicList() {
+        List<String> filtered = new ArrayList<String>();
+        for (String topic : (Set<String>) mConsumer.listTopics().keySet()) {
+            if (topic.matches(mConfig.getKafkaTopicFilter())) {
+                filtered.add(topic);
+            }
+        }
+        return filtered;
+    }
+
+    public List<Integer> getPartitions(String topic) {
+        List<Integer> partitions = new ArrayList<Integer>();
+        for (PartitionInfo p : (List<PartitionInfo>)mConsumer.partitionsFor(topic)) {
+            partitions.add(p.partition());
+        }
+        return partitions;
     }
 }

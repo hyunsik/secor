@@ -59,7 +59,6 @@ public class ProgressMonitor {
     private static final String PERIOD = ".";
 
     private SecorConfig mConfig;
-    private ZookeeperConnector mZookeeperConnector;
     private KafkaClient mKafkaClient;
     private MessageParser mMessageParser;
     private String mPrefix;
@@ -69,7 +68,6 @@ public class ProgressMonitor {
             throws Exception
     {
         mConfig = config;
-        mZookeeperConnector = new ZookeeperConnector(mConfig);
         mKafkaClient = new KafkaClient(mConfig);
         mMessageParser = (MessageParser) ReflectionUtil.createMessageParser(
                 mConfig.getMessageParserClass(), mConfig);
@@ -176,7 +174,7 @@ public class ProgressMonitor {
     }
 
     private List<Stat> getStats() throws Exception {
-        List<String> topics = mZookeeperConnector.getCommittedOffsetTopics();
+        List<String> topics = mKafkaClient.getTopicList();
         List<Stat> stats = Lists.newArrayList();
 
         for (String topic : topics) {
@@ -185,7 +183,7 @@ public class ProgressMonitor {
                 LOG.info("skipping topic {}", topic);
                 continue;
             }
-            List<Integer> partitions = mZookeeperConnector.getCommittedOffsetPartitions(topic);
+            List<Integer> partitions = mKafkaClient.getPartitions(topic);
             for (Integer partition : partitions) {
                 TopicPartition topicPartition = new TopicPartition(topic, partition);
                 Message committedMessage = mKafkaClient.getCommittedMessage(topicPartition);
