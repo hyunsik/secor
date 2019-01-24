@@ -43,7 +43,7 @@ public class PartitionFinalizer {
     private final SecorConfig mConfig;
     private final TimestampedMessageParser mMessageParser;
     private final KafkaClient mKafkaClient;
-    private final QuboleClient mQuboleClient;
+    private QuboleClient mQuboleClient = null;
     private final String mFileExtension;
     private final int mLookbackPeriods;
 
@@ -52,7 +52,9 @@ public class PartitionFinalizer {
         mKafkaClient = new KafkaClient(mConfig);
         mMessageParser = (TimestampedMessageParser) ReflectionUtil.createMessageParser(
                 mConfig.getMessageParserClass(), mConfig);
-        mQuboleClient = new QuboleClient(mConfig);
+        if (mConfig.getQuboleEnabled()) {
+            mQuboleClient = new QuboleClient(mConfig);
+        }
         if (mConfig.getFileExtension() != null && !mConfig.getFileExtension().isEmpty()) {
             mFileExtension = mConfig.getFileExtension();
         } else if (mConfig.getCompressionCodec() != null && !mConfig.getCompressionCodec().isEmpty()) {
@@ -197,6 +199,11 @@ public class PartitionFinalizer {
     public void finalizePartitions() throws Exception {
         for (String topic : mKafkaClient.getTopicList()) {
             LOG.info("finalizing topic {}", topic);
+            if (topic.equals("canal.price.pivot_aggregator_site_items") |
+                    topic.equals("canal.price.price_comparison_snapshots") |
+                    topic.equals("canal.price.actions")) {
+                continue;
+            }
             String[] partitions = getFinalizedUptoPartitions(topic);
             LOG.info("finalized timestamp for topic {} is {}", topic, partitions);
             if (partitions != null) {
