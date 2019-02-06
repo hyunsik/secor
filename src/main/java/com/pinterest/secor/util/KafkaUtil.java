@@ -68,6 +68,9 @@ public class KafkaUtil {
     if (mConfig.getFetchMaxWaitMs() != null && !mConfig.getFetchMaxWaitMs().isEmpty()) {
       props.put("fetch.max.wait.ms", mConfig.getFetchMaxWaitMs());
     }
+    if (mConfig.getMaxPartitionFetchBytes() != null && !mConfig.getMaxPartitionFetchBytes().isEmpty()) {
+      props.put("max.partition.fetch.bytes", mConfig.getMaxPartitionFetchBytes());
+    }
 
     return props;
   }

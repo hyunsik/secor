@@ -94,13 +94,14 @@ public class SecorConfig {
     public String getRequestTimeoutMs() {
         return getString("kafka.request.timeout.ms");
     }
-
     public String getSessionTimeout() {
         return getString("kafka.session.timeout.ms");
     }
-
     public String getFetchMaxWaitMs() {
         return getString("kafka.fetch.max.wait.ms");
+    }
+    public String getMaxPartitionFetchBytes() {
+        return getString("kafka.max.partition.fetch.bytes");
     }
 
     public String getConsumerAutoOffsetReset() {
