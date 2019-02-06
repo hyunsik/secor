@@ -40,8 +40,6 @@ public class KafkaUtil {
     props.put("consumer.timeout.ms", Integer.toString(mConfig.getConsumerTimeoutMs()));
     props.put("consumer.id", IdUtil.getConsumerId());
 
-    props.put("session.timeout.ms", 180 * 1000);
-
     props.put("partition.assignment.strategy", mConfig.getPartitionAssignmentStrategy());
     if (mConfig.getRebalanceMaxRetries() != null &&
         !mConfig.getRebalanceMaxRetries().isEmpty()) {
@@ -61,8 +59,14 @@ public class KafkaUtil {
     if (mConfig.getFetchMinBytes() != null && !mConfig.getFetchMinBytes().isEmpty()) {
       props.put("fetch.min.bytes", mConfig.getFetchMinBytes());
     }
-    if (mConfig.getFetchWaitMaxMs() != null && !mConfig.getFetchWaitMaxMs().isEmpty()) {
-      props.put("fetch.wait.max.ms", mConfig.getFetchWaitMaxMs());
+    if (mConfig.getSessionTimeout() != null && !mConfig.getSessionTimeout().isEmpty()) {
+      props.put("session.timeout.ms", mConfig.getSessionTimeout());
+    }
+    if (mConfig.getRequestTimeoutMs() != null && !mConfig.getRequestTimeoutMs().isEmpty()) {
+      props.put("request.timeout.ms", mConfig.getRequestTimeoutMs());
+    }
+    if (mConfig.getFetchMaxWaitMs() != null && !mConfig.getFetchMaxWaitMs().isEmpty()) {
+      props.put("fetch.max.wait.ms", mConfig.getFetchMaxWaitMs());
     }
 
     return props;
