@@ -107,7 +107,7 @@ public class MessageReader {
         ConsumerRecord<byte [], byte []> kafkaMessage = rIterator.next();
         Message message = new Message(kafkaMessage.topic(), kafkaMessage.partition(),
                                       kafkaMessage.offset(), kafkaMessage.key(),
-                                      kafkaMessage.value());
+                                      kafkaMessage.value(), kafkaMessage.timestamp());
         TopicPartition topicPartition = new TopicPartition(message.getTopic(),
                                                            message.getKafkaPartition());
         updateAccessTime(topicPartition);
