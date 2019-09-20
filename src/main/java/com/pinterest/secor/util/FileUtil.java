@@ -74,11 +74,13 @@ public class FileUtil {
                         "Must specify both aws.access.key and aws.secret.key or neither.");
                 }
                 if (!config.getAwsAccessKey().isEmpty()) {
-                    mConf.set(Constants.ENDPOINT, config.getAwsEndpoint());
                     mConf.set(Constants.ACCESS_KEY, config.getAwsAccessKey());
                     mConf.set(Constants.SECRET_KEY, config.getAwsSecretKey());
                     mConf.set("fs.s3n.awsAccessKeyId", config.getAwsAccessKey());
                     mConf.set("fs.s3n.awsSecretAccessKey", config.getAwsSecretKey());
+                }
+                if (!config.getAwsEndpoint().isEmpty()) {
+                    mConf.set(Constants.ENDPOINT, config.getAwsEndpoint());
                 }
             }
         }
