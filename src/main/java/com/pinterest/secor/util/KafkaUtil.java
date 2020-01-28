@@ -62,6 +62,12 @@ public class KafkaUtil {
     if (mConfig.getSessionTimeout() != null && !mConfig.getSessionTimeout().isEmpty()) {
       props.put("session.timeout.ms", mConfig.getSessionTimeout());
     }
+    if (mConfig.getMaxPollInterval() != null && !mConfig.getMaxPollInterval().isEmpty()) {
+      props.put("max.poll.interval.ms", mConfig.getMaxPollInterval());
+    }
+    if (mConfig.getHeartbeatInterval() != null && !mConfig.getHeartbeatInterval().isEmpty()) {
+      props.put("heartbeat.interval.ms", mConfig.getHeartbeatInterval());
+    }
     if (mConfig.getRequestTimeoutMs() != null && !mConfig.getRequestTimeoutMs().isEmpty()) {
       props.put("request.timeout.ms", mConfig.getRequestTimeoutMs());
     }
