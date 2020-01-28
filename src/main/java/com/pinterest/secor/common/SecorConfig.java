@@ -97,6 +97,9 @@ public class SecorConfig {
     public String getSessionTimeout() {
         return getString("kafka.session.timeout.ms");
     }
+    public String getMaxPollRecords() {
+        return getString("kafka.max.poll.records");
+    }
     public String getMaxPollInterval() {
         return getString("kafka.max.poll.interval.ms");
     }
